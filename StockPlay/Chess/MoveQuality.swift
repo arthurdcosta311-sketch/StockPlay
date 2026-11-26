@@ -45,6 +45,20 @@ enum MoveQuality: String, Sendable, CaseIterable, Identifiable {
         }
     }
 
+    /// chess.com draws these marks on the board, in the corner of the square the piece went to.
+    var boardMark: String? {
+        switch self {
+        case .brilliant: return "!!"
+        case .best: return "★"
+        case .excellent: return "✓"
+        case .good: return "✓"
+        case .book: return nil
+        case .inaccuracy: return "?!"
+        case .mistake: return "?"
+        case .blunder: return "??"
+        }
+    }
+
     var color: Color {
         switch self {
         case .brilliant: return Theme.brilliant
@@ -101,6 +115,11 @@ struct GameReview: Sendable {
     func count(_ quality: MoveQuality, for color: ChessColor) -> Int {
         return (color == playerColor ? playerCounts : engineCounts)[quality] ?? 0
     }
+}
+
+struct MoveBadge: Equatable, Sendable {
+    let square: Square
+    let quality: MoveQuality
 }
 
 enum ReviewMath {

@@ -108,6 +108,36 @@ struct StatColumn: View {
     }
 }
 
+/// chess.com's move mark: "!!", "!", "★", "✓", "?!", "?", "??", or a book for theory.
+struct QualityMark: View {
+    let quality: MoveQuality
+    let size: CGFloat
+    var showsCircle: Bool = false
+
+    var body: some View {
+        ZStack {
+            if showsCircle {
+                Circle()
+                    .fill(Theme.background)
+                Circle()
+                    .strokeBorder(quality.color, lineWidth: max(1.4, size * 0.16))
+            }
+
+            if let mark = quality.boardMark {
+                Text(mark)
+                    .font(.system(size: size * (mark.count > 1 ? 0.62 : 0.84), weight: .heavy, design: .rounded))
+                    .foregroundStyle(quality.color)
+                    .minimumScaleFactor(0.4)
+            } else {
+                Image(systemName: quality.symbol)
+                    .font(.system(size: size * 0.56, weight: .bold))
+                    .foregroundStyle(quality.color)
+            }
+        }
+        .frame(width: size, height: size)
+    }
+}
+
 /// A selectable pill.
 struct ChoicePill: View {
     let title: String

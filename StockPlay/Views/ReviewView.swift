@@ -121,8 +121,7 @@ struct ReviewView: View {
 
     private func qualityChip(quality: MoveQuality, count: Int) -> some View {
         HStack(spacing: 5) {
-            Image(systemName: quality.symbol)
-                .font(.system(size: 10, weight: .bold))
+            QualityMark(quality: quality, size: 12)
             Text("\(count)")
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .monospacedDigit()
@@ -149,9 +148,7 @@ struct ReviewView: View {
                         .foregroundStyle(Theme.textSecondary)
                         .frame(width: 20, alignment: .trailing)
 
-                    Image(systemName: item.quality.symbol)
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(item.quality.color)
+                    QualityMark(quality: item.quality, size: 13)
                         .frame(width: 15)
 
                     Text(item.san)
@@ -192,9 +189,7 @@ struct ReviewView: View {
 
             ForEach(MoveQuality.allCases) { quality in
                 HStack(spacing: 8) {
-                    Image(systemName: quality.symbol)
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(quality.color)
+                    QualityMark(quality: quality, size: 13)
                         .frame(width: 15)
                     Text(quality.title)
                         .font(.system(size: 12, weight: .semibold))

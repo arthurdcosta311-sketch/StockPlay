@@ -15,6 +15,7 @@ struct BoardView: View {
     let selected: Square?
     let targets: [Square]
     let lastMove: Move?
+    let badge: MoveBadge?
     let animationToken: Int
     let onTap: (Square) -> Void
 
@@ -46,12 +47,21 @@ struct BoardView: View {
                         .transition(.opacity)
                 }
                 .allowsHitTesting(false)
+
+                // chess.com's verdict, in the corner of the square the move went to.
+                if let badge = badge {
+                    QualityMark(quality: badge.quality, size: cell * 0.40, showsCircle: true)
+                        .position(badgePosition(for: badge.square, cell: cell))
+                        .transition(.scale.combined(with: .opacity))
+                        .allowsHitTesting(false)
+                }
             }
             .frame(width: side, height: side)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .aspectRatio(1, contentMode: .fit)
         .animation(.easeOut(duration: 0.17), value: animationToken)
+        .animation(.spring(response: 0.32, dampingFraction: 0.7), value: badge)
     }
 
     // MARK: - Geometry
@@ -67,6 +77,12 @@ struct BoardView: View {
         let column = flipped ? 7 - square.file : square.file
         let row = flipped ? square.rank : 7 - square.rank
         return CGPoint(x: (CGFloat(column) + 0.5) * cell, y: (CGFloat(row) + 0.5) * cell)
+    }
+
+    /// The badge sits in the top corner of its square, inside the board.
+    private func badgePosition(for square: Square, cell: CGFloat) -> CGPoint {
+        let middle = center(of: square, cell: cell)
+        return CGPoint(x: middle.x + cell * 0.28, y: middle.y - cell * 0.28)
     }
 
     // MARK: - Squares

@@ -459,6 +459,17 @@ final class GameController: Identifiable {
         }
     }
 
+    /// The verdict badge for the board: on the square your latest annotated move went to.
+    var lastMoveBadge: MoveBadge? {
+        guard let index = entries.lastIndex(where: { $0.color == playerColor && $0.quality != nil }),
+              entries.indices.contains(index),
+              moveHistory.indices.contains(index),
+              let quality = entries[index].quality else {
+            return nil
+        }
+        return MoveBadge(square: moveHistory[index].to, quality: quality)
+    }
+
     private func applyQuality(_ quality: MoveQuality, bestSAN: String?, at index: Int) {
         guard entries.indices.contains(index), entries[index].id == index else { return }
         entries[index].quality = quality

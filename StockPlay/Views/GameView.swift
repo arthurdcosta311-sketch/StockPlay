@@ -132,6 +132,7 @@ struct GameView: View {
             selected: controller.selectedSquare,
             targets: controller.legalTargets,
             lastMove: controller.lastMove,
+            badge: controller.lastMoveBadge,
             animationToken: controller.animationToken,
             onTap: { square in controller.handleTap(square) }
         )
@@ -157,8 +158,7 @@ struct GameView: View {
             Spacer(minLength: 0)
             if let verdict = lastVerdict {
                 HStack(spacing: 4) {
-                    Image(systemName: verdict.quality.symbol)
-                        .font(.system(size: 9, weight: .bold))
+                    QualityMark(quality: verdict.quality, size: 11)
                     Text(verdict.quality.title)
                         .font(.system(size: 11, weight: .semibold))
                 }
@@ -196,9 +196,7 @@ struct GameView: View {
                             .font(.system(size: 12, weight: .medium, design: .monospaced))
                             .foregroundStyle(entry.color == controller.playerColor ? Theme.textPrimary : Theme.textSecondary)
                         if let quality = entry.quality {
-                            Image(systemName: quality.symbol)
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(quality.color)
+                            QualityMark(quality: quality, size: 12)
                         }
                     }
                     .padding(.horizontal, 7)

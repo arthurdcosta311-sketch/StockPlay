@@ -141,6 +141,7 @@ struct GameView: View {
             lastMove: controller.lastMove,
             badge: controller.lastMoveBadge,
             checkSquare: controller.checkSquare,
+            premove: controller.premove,
             animationToken: controller.animationToken,
             onTap: { square in controller.handleTap(square) }
         )

@@ -17,6 +17,7 @@ struct BoardView: View {
     let lastMove: Move?
     let badge: MoveBadge?
     let checkSquare: Square?
+    let premove: PremoveVisual?
     let animationToken: Int
     let onTap: (Square) -> Void
 
@@ -41,10 +42,15 @@ struct BoardView: View {
                 }
 
                 // Pieces ride above the squares on their own layer, so a move slides.
+                // A queued premove drags its piece to the target, ghosted, until it is played.
                 ForEach(pieces) { item in
+                    let queued = premove.flatMap { visual -> Square? in
+                        return visual.from == item.square ? visual.to : nil
+                    }
                     pieceView(item.piece, size: cell)
                         .frame(width: cell, height: cell)
-                        .position(center(of: item.square, cell: cell))
+                        .position(center(of: queued ?? item.square, cell: cell))
+                        .opacity(queued == nil ? 1 : 0.45)
                         .transition(.opacity)
                 }
                 .allowsHitTesting(false)
@@ -62,6 +68,7 @@ struct BoardView: View {
         }
         .aspectRatio(1, contentMode: .fit)
         .animation(.easeOut(duration: 0.17), value: animationToken)
+        .animation(.easeOut(duration: 0.17), value: premove)
         .animation(.spring(response: 0.32, dampingFraction: 0.7), value: badge)
     }
 
@@ -94,6 +101,7 @@ struct BoardView: View {
         let isLastMove = lastMove.map { $0.from == square || $0.to == square } ?? false
         let hasPiece = board.piece(at: square) != nil
         let isCheck = checkSquare == square
+        let isPremoveSquare = premove.map { $0.from == square || $0.to == square } ?? false
 
         return ZStack {
             Rectangle()
@@ -105,6 +113,9 @@ struct BoardView: View {
 
             if isLastMove {
                 Rectangle().fill(Theme.gold.opacity(0.30))
+            }
+            if isPremoveSquare {
+                Rectangle().fill(Theme.gold.opacity(0.18))
             }
             if isSelected {
                 Rectangle().fill(Theme.gold.opacity(0.45))

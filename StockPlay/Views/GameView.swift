@@ -133,6 +133,7 @@ struct GameView: View {
             targets: controller.legalTargets,
             lastMove: controller.lastMove,
             badge: controller.lastMoveBadge,
+            checkSquare: controller.checkSquare,
             animationToken: controller.animationToken,
             onTap: { square in controller.handleTap(square) }
         )

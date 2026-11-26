@@ -31,9 +31,13 @@ enum Theme {
     static let best = Color(red: 0.506, green: 0.714, blue: 0.298)
     static let good = Color(red: 0.596, green: 0.729, blue: 0.404)
     static let book = Color(red: 0.710, green: 0.545, blue: 0.400)
+    static let forced = Color(red: 0.639, green: 0.659, blue: 0.678)
     static let inaccuracy = Color(red: 0.969, green: 0.776, blue: 0.192)
     static let mistake = Color(red: 1.000, green: 0.643, blue: 0.349)
     static let blunder = Color(red: 0.980, green: 0.255, blue: 0.176)
+
+    /// The red wash on a king that is in check.
+    static let checkGlow = Color(red: 0.898, green: 0.196, blue: 0.157)
 
     static func color(for outcome: GameOutcome) -> Color {
         switch outcome {

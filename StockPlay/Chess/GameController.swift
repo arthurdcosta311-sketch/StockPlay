@@ -425,11 +425,18 @@ final class GameController: Identifiable {
     private func classifyLive(move: Move, before: ChessBoard, entryIndex: Int) {
         classificationTask?.cancel()
         let isBook = OpeningBook.isBookMove(move, in: before)
+        let isForced = before.legalMoves.count == 1
+
+        // Theory and forced moves need no engine: there is nothing to compare them with.
+        if isForced || isBook {
+            applyQuality(isForced ? .forced : .book, bestSAN: nil, at: entryIndex)
+            return
+        }
 
         classificationTask = Task { [weak self] in
             guard let self = self else { return }
 
-            var quality: MoveQuality = .book
+            var quality: MoveQuality = .best
             var bestSAN: String? = nil
 
             if !isBook {
@@ -446,7 +453,13 @@ final class GameController: Identifiable {
                 let isMate = afterPosition.legalMoves.isEmpty && afterPosition.isInCheck(afterPosition.sideToMove)
                 let isBest = isMate || beforeAssessment.bestMove == move.uci
                 let brilliant = isBest && self.isSacrifice(move, before: before, after: afterPosition, scoreBefore: scoreBefore)
-                quality = ReviewMath.classify(winDrop: winDrop, isBestMove: isBest, isBook: false, isBrilliant: brilliant)
+                quality = ReviewMath.classify(
+                    winDrop: winDrop,
+                    isBestMove: isBest,
+                    isBook: false,
+                    isBrilliant: brilliant,
+                    isForced: false
+                )
 
                 if !isBest, let bestUCI = beforeAssessment.bestMove,
                    let best = before.legalMoves.first(where: { $0.uci == bestUCI }) {
@@ -457,6 +470,12 @@ final class GameController: Identifiable {
             guard !Task.isCancelled else { return }
             self.applyQuality(quality, bestSAN: bestSAN, at: entryIndex)
         }
+    }
+
+    /// The king that is in check, so the board can wash its square red.
+    var checkSquare: Square? {
+        guard board.isInCheck(board.sideToMove) else { return nil }
+        return board.kingSquare(for: board.sideToMove)
     }
 
     /// The verdict badge for the board: on the square your latest annotated move went to.
@@ -539,11 +558,18 @@ final class GameController: Identifiable {
             let winDrop = ReviewMath.winPercent(centipawns: scoreBefore) - ReviewMath.winPercent(centipawns: scoreAfter)
 
             let isBook = OpeningBook.isBookMove(move, in: before)
+            let isForced = before.legalMoves.count == 1
             let bestUCI = assessments[index].bestMove
             let isMate = after.legalMoves.isEmpty && after.isInCheck(after.sideToMove)
             let isBest = isMate || bestUCI == move.uci
             let brilliant = isBest && isSacrifice(move, before: before, after: after, scoreBefore: scoreBefore)
-            let quality = ReviewMath.classify(winDrop: winDrop, isBestMove: isBest, isBook: isBook, isBrilliant: brilliant)
+            let quality = ReviewMath.classify(
+                winDrop: winDrop,
+                isBestMove: isBest,
+                isBook: isBook,
+                isBrilliant: brilliant,
+                isForced: isForced
+            )
 
             var bestSAN: String? = nil
             if !isBest, let bestUCI = bestUCI, let best = before.legalMoves.first(where: { $0.uci == bestUCI }) {

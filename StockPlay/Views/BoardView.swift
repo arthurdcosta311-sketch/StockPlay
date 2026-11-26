@@ -16,6 +16,7 @@ struct BoardView: View {
     let targets: [Square]
     let lastMove: Move?
     let badge: MoveBadge?
+    let checkSquare: Square?
     let animationToken: Int
     let onTap: (Square) -> Void
 
@@ -92,10 +93,15 @@ struct BoardView: View {
         let isTarget = targets.contains(square)
         let isLastMove = lastMove.map { $0.from == square || $0.to == square } ?? false
         let hasPiece = board.piece(at: square) != nil
+        let isCheck = checkSquare == square
 
         return ZStack {
             Rectangle()
                 .fill(square.isLight ? Theme.squareLight : Theme.squareDark)
+
+            if isCheck {
+                CheckGlow(size: size)
+            }
 
             if isLastMove {
                 Rectangle().fill(Theme.gold.opacity(0.30))
@@ -188,6 +194,36 @@ struct BoardView: View {
                     y: size * 0.012
                 )
         }
+    }
+}
+
+/// The red wash chess.com puts behind a king that is in check: it breathes.
+private struct CheckGlow: View {
+    let size: CGFloat
+
+    @State private var pulsing = false
+
+    var body: some View {
+        RadialGradient(
+            colors: [
+                Theme.checkGlow.opacity(0.92),
+                Theme.checkGlow.opacity(0.42),
+                Theme.checkGlow.opacity(0.0),
+            ],
+            center: .center,
+            startRadius: 0,
+            endRadius: size * 0.72
+        )
+        .scaleEffect(pulsing ? 1.06 : 0.92)
+        .opacity(pulsing ? 1.0 : 0.62)
+        .animation(
+            .easeInOut(duration: 0.75).repeatForever(autoreverses: true),
+            value: pulsing
+        )
+        .onAppear {
+            pulsing = true
+        }
+        .allowsHitTesting(false)
     }
 }
 

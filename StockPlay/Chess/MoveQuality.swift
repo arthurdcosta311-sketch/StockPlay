@@ -13,6 +13,7 @@ enum MoveQuality: String, Sendable, CaseIterable, Identifiable {
     case excellent
     case good
     case book
+    case forced
     case inaccuracy
     case mistake
     case blunder
@@ -26,6 +27,7 @@ enum MoveQuality: String, Sendable, CaseIterable, Identifiable {
         case .excellent: return "Excellent"
         case .good: return "Good"
         case .book: return "Book"
+        case .forced: return "Forced"
         case .inaccuracy: return "Inaccuracy"
         case .mistake: return "Mistake"
         case .blunder: return "Blunder"
@@ -39,6 +41,7 @@ enum MoveQuality: String, Sendable, CaseIterable, Identifiable {
         case .excellent: return "checkmark"
         case .good: return "checkmark.circle"
         case .book: return "book.fill"
+        case .forced: return "arrow.right"
         case .inaccuracy: return "exclamationmark.triangle.fill"
         case .mistake: return "questionmark.circle.fill"
         case .blunder: return "xmark.circle.fill"
@@ -53,6 +56,7 @@ enum MoveQuality: String, Sendable, CaseIterable, Identifiable {
         case .excellent: return "✓"
         case .good: return "✓"
         case .book: return nil
+        case .forced: return "→"
         case .inaccuracy: return "?!"
         case .mistake: return "?"
         case .blunder: return "??"
@@ -65,6 +69,7 @@ enum MoveQuality: String, Sendable, CaseIterable, Identifiable {
         case .best, .excellent: return Theme.best
         case .good: return Theme.good
         case .book: return Theme.book
+        case .forced: return Theme.forced
         case .inaccuracy: return Theme.inaccuracy
         case .mistake: return Theme.mistake
         case .blunder: return Theme.blunder
@@ -74,7 +79,7 @@ enum MoveQuality: String, Sendable, CaseIterable, Identifiable {
     /// Whether the move deserves praise rather than a warning.
     var isPraise: Bool {
         switch self {
-        case .brilliant, .best, .excellent, .good, .book: return true
+        case .brilliant, .best, .excellent, .good, .book, .forced: return true
         case .inaccuracy, .mistake, .blunder: return false
         }
     }
@@ -87,6 +92,7 @@ enum MoveQuality: String, Sendable, CaseIterable, Identifiable {
         case .excellent: return "Almost as good as the best"
         case .good: return "A sound move"
         case .book: return "Theory from the opening book"
+        case .forced: return "The only move that held the position"
         case .inaccuracy: return "Lets the position slip"
         case .mistake: return "Gives away a real advantage"
         case .blunder: return "Throws the game away"
@@ -142,7 +148,8 @@ enum ReviewMath {
         return min(100, max(0, raw))
     }
 
-    static func classify(winDrop: Double, isBestMove: Bool, isBook: Bool, isBrilliant: Bool) -> MoveQuality {
+    static func classify(winDrop: Double, isBestMove: Bool, isBook: Bool, isBrilliant: Bool, isForced: Bool) -> MoveQuality {
+        if isForced { return .forced }
         if isBook { return .book }
         if isBestMove { return isBrilliant ? .brilliant : .best }
         if winDrop <= 2 { return .excellent }

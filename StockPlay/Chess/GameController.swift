@@ -1,0 +1,382 @@
+//
+//  GameController.swift
+//  StockPlay
+//
+//  One rated game against the grandmaster: board, clock, engine turns and the rating update.
+//
+
+import Foundation
+import Observation
+
+struct TimeControl: Identifiable, Hashable, Sendable {
+    let id: String
+    let baseSeconds: Int
+    let incrementSeconds: Int
+
+    var isUnlimited: Bool { return baseSeconds == 0 }
+
+    var label: String {
+        if isUnlimited { return "Unlimited" }
+        let minutes = baseSeconds / 60
+        if incrementSeconds > 0 {
+            return "\(minutes) min + \(incrementSeconds)s"
+        }
+        return "\(minutes) min"
+    }
+
+    var shortLabel: String {
+        if isUnlimited { return "Unlimited" }
+        if incrementSeconds > 0 { return "\(baseSeconds / 60)+\(incrementSeconds)" }
+        return "\(baseSeconds / 60) min"
+    }
+
+    static let all: [TimeControl] = [
+        TimeControl(id: "unlimited", baseSeconds: 0, incrementSeconds: 0),
+        TimeControl(id: "3+2", baseSeconds: 180, incrementSeconds: 2),
+        TimeControl(id: "5+0", baseSeconds: 300, incrementSeconds: 0),
+        TimeControl(id: "10+0", baseSeconds: 600, incrementSeconds: 0),
+    ]
+}
+
+struct MoveEntry: Identifiable, Sendable {
+    let id: Int
+    let san: String
+    let color: ChessColor
+    let moveNumber: Int
+}
+
+@MainActor
+@Observable
+final class GameController: Identifiable {
+    static let opponentName = "Stockfish 19"
+    static let opponentTitle = "GM"
+    static let opponentRating = 99999
+
+    enum Phase: Equatable, Sendable {
+        case playing
+        case finished
+    }
+
+    let id = UUID()
+    let playerColor: ChessColor
+    let timeControl: TimeControl
+
+    private(set) var board: ChessBoard
+    private(set) var entries: [MoveEntry] = []
+    private(set) var lastMove: Move?
+    private(set) var phase: Phase = .playing
+    private(set) var end: GameEnd?
+    private(set) var ratingChange: RatingChange?
+    private(set) var isEngineThinking = false
+    private(set) var clocks: [ChessColor: TimeInterval] = [:]
+
+    var selectedSquare: Square?
+    var legalTargets: [Square] = []
+    var isBoardFlipped: Bool
+
+    private var boardHistory: [ChessBoard] = []
+    private var repetitions: [String: Int] = [:]
+    private var engineTask: Task<Void, Never>?
+    private var clockTask: Task<Void, Never>?
+    private var hasStarted = false
+    private var startDate = Date()
+
+    init(playerColor: ChessColor, timeControl: TimeControl) {
+        self.playerColor = playerColor
+        self.timeControl = timeControl
+        self.board = .initial
+        self.isBoardFlipped = playerColor == .black
+        self.clocks = [
+            .white: TimeInterval(timeControl.baseSeconds),
+            .black: TimeInterval(timeControl.baseSeconds),
+        ]
+        self.repetitions = [ChessBoard.initial.positionKey: 1]
+    }
+
+    // MARK: - Presentation helpers
+
+    var statusText: String {
+        if phase == .finished, let end = end {
+            return end.reason
+        }
+        if board.isInCheck(board.sideToMove) {
+            return board.sideToMove == playerColor ? "Check — defend your king" : "Check"
+        }
+        if isEngineThinking {
+            return "\(Self.opponentName) is thinking"
+        }
+        if board.sideToMove == playerColor {
+            return "Your move"
+        }
+        return "Waiting for the engine"
+    }
+
+    var isPlayersTurn: Bool {
+        return phase == .playing && board.sideToMove == playerColor && !isEngineThinking
+    }
+
+    func clockText(for color: ChessColor) -> String? {
+        guard !timeControl.isUnlimited else { return nil }
+        let remaining = max(0, clocks[color] ?? 0)
+        if remaining < 20 {
+            return String(format: "%.1f", remaining)
+        }
+        let total = Int(remaining)
+        let minutes = total / 60
+        let seconds = total % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    // MARK: - Lifecycle
+
+    func start() {
+        guard !hasStarted else { return }
+        hasStarted = true
+        startDate = Date()
+        startClock()
+        if board.sideToMove != playerColor {
+            triggerEngineMove()
+        }
+    }
+
+    func toggleFlip() {
+        isBoardFlipped.toggle()
+    }
+
+    func clearSelection() {
+        selectedSquare = nil
+        legalTargets = []
+    }
+
+    // MARK: - Player input
+
+    func handleTap(_ square: Square) {
+        guard isPlayersTurn else { return }
+
+        if let selected = selectedSquare, legalTargets.contains(square) {
+            let candidates = board.legalMoves.filter { $0.from == selected && $0.to == square }
+            guard let move = candidates.first(where: { $0.promotion == .queen }) ?? candidates.first else {
+                clearSelection()
+                return
+            }
+            clearSelection()
+            perform(move)
+            return
+        }
+
+        if let piece = board.piece(at: square), piece.color == playerColor {
+            selectedSquare = square
+            legalTargets = board.legalMoves.filter { $0.from == square }.map { $0.to }
+        } else {
+            clearSelection()
+        }
+    }
+
+    func resign() {
+        guard phase == .playing else { return }
+        engineTask?.cancel()
+        isEngineThinking = false
+        finish(.resignation(winner: playerColor.opposite))
+    }
+
+    func takeback() {
+        guard phase == .playing else { return }
+        engineTask?.cancel()
+        isEngineThinking = false
+
+        var undone = 0
+        while !boardHistory.isEmpty {
+            let key = board.positionKey
+            repetitions[key] = max(0, (repetitions[key] ?? 1) - 1)
+            board = boardHistory.removeLast()
+            if !entries.isEmpty {
+                entries.removeLast()
+            }
+            undone += 1
+            if board.sideToMove == playerColor { break }
+        }
+
+        guard undone > 0 else { return }
+        lastMove = nil
+        clearSelection()
+        if board.sideToMove != playerColor {
+            triggerEngineMove()
+        }
+    }
+
+    // MARK: - Play
+
+    private func perform(_ move: Move) {
+        guard phase == .playing else { return }
+        let san = board.san(for: move)
+        let mover = board.sideToMove
+        let moveNumber = board.fullmoveNumber
+
+        boardHistory.append(board)
+        entries.append(MoveEntry(id: entries.count, san: san, color: mover, moveNumber: moveNumber))
+
+        board = board.applying(move)
+        lastMove = move
+        repetitions[board.positionKey, default: 0] += 1
+
+        if !timeControl.isUnlimited, let remaining = clocks[mover] {
+            clocks[mover] = remaining + TimeInterval(timeControl.incrementSeconds)
+        }
+
+        if let finished = detectEnd() {
+            finish(finished)
+            return
+        }
+        if board.sideToMove != playerColor {
+            triggerEngineMove()
+        }
+    }
+
+    private func detectEnd() -> GameEnd? {
+        return board.gameEnd(repetitions: repetitions[board.positionKey] ?? 1)
+    }
+
+    private func triggerEngineMove() {
+        guard phase == .playing else { return }
+        engineTask?.cancel()
+        isEngineThinking = true
+
+        let position = board
+        let limits = EngineLimits(maxDepth: 6, timeLimit: 1.5)
+
+        engineTask = Task { [weak self] in
+            guard let self = self else { return }
+            let startedAt = Date()
+
+            var chosen: Move? = nil
+
+            // Stockfish when its network is ready…
+            if let uci = await StockfishService.shared.uciMove(fen: position.fen, milliseconds: 900) {
+                chosen = position.legalMoves.first(where: { $0.uci == uci })
+            }
+
+            // …the built-in engine otherwise.
+            if chosen == nil {
+                chosen = await Task.detached(priority: .userInitiated) { () -> Move? in
+                    return ChessEngine().searchBestMove(in: position, limits: limits)
+                }.value
+            }
+
+            guard !Task.isCancelled else { return }
+
+            // A short beat so the grandmaster feels like it is considering.
+            let elapsed = Date().timeIntervalSince(startedAt)
+            if elapsed < 0.4 {
+                try? await Task.sleep(for: .milliseconds(Int((0.4 - elapsed) * 1000)))
+            }
+            guard !Task.isCancelled else { return }
+            guard self.phase == .playing else { return }
+
+            self.isEngineThinking = false
+
+            guard let move = chosen else {
+                if let finished = self.detectEnd() {
+                    self.finish(finished)
+                }
+                return
+            }
+
+            if let legal = self.board.legalMoves.first(where: { $0.uci == move.uci }) {
+                self.perform(legal)
+            } else if let fallback = self.board.legalMoves.first {
+                self.perform(fallback)
+            }
+        }
+    }
+
+    private func finish(_ finished: GameEnd) {
+        guard phase == .playing else { return }
+        phase = .finished
+        end = finished
+        engineTask?.cancel()
+        clockTask?.cancel()
+        isEngineThinking = false
+        clearSelection()
+
+        ratingChange = PlayerStore.shared.record(
+            outcome: finished.outcome(for: playerColor),
+            reason: finished.playerReason(for: playerColor),
+            playerColor: playerColor,
+            moveCount: entries.count,
+            pgn: pgn(),
+            opponentRating: Self.opponentRating
+        )
+    }
+
+    // MARK: - Clock
+
+    private func startClock() {
+        guard !timeControl.isUnlimited else { return }
+        clockTask?.cancel()
+        clockTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(100))
+                guard let self = self else { return }
+                guard self.phase == .playing else { return }
+
+                let side = self.board.sideToMove
+                let remaining = (self.clocks[side] ?? 0) - 0.1
+                if remaining <= 0 {
+                    self.clocks[side] = 0
+                    self.finish(.timeout(winner: side.opposite))
+                    return
+                }
+                self.clocks[side] = remaining
+            }
+        }
+    }
+
+    // MARK: - Score sheet
+
+    var moveText: String {
+        var parts: [String] = []
+        var index = 0
+        while index < entries.count {
+            let entry = entries[index]
+            if entry.color == .white {
+                var text = "\(entry.moveNumber). \(entry.san)"
+                index += 1
+                if index < entries.count, entries[index].color == .black {
+                    text += " " + entries[index].san
+                    index += 1
+                }
+                parts.append(text)
+            } else {
+                parts.append("\(entry.moveNumber)... \(entry.san)")
+                index += 1
+            }
+        }
+        return parts.joined(separator: " ")
+    }
+
+    private func resultString() -> String {
+        guard let end = end else { return "*" }
+        guard let winner = end.winner else { return "1/2-1/2" }
+        return winner == .white ? "1-0" : "0-1"
+    }
+
+    func pgn() -> String {
+        var lines: [String] = []
+        lines.append("[Event \"StockPlay rated game\"]")
+        lines.append("[Site \"StockPlay for iOS\"]")
+        lines.append("[Date \"\(Self.pgnDateFormatter.string(from: startDate))\"]")
+        lines.append("[White \"\(playerColor == .white ? "Player" : Self.opponentName)\"]")
+        lines.append("[Black \"\(playerColor == .black ? "Player" : Self.opponentName)\"]")
+        lines.append("[Result \"\(resultString())\"]")
+        lines.append("")
+        lines.append(moveText)
+        return lines.joined(separator: "\n")
+    }
+
+    private static let pgnDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy.MM.dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter
+    }()
+}

@@ -30,7 +30,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		0A0000000000000000000011 /* Exceptions for "Grandmaster" folder in "Grandmaster" target */ = {
+		0A0000000000000000000011 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -40,22 +40,22 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		0A0000000000000000000005 /* Grandmaster */ = {
+		0A0000000000000000000005 /* StockPlay */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				0A0000000000000000000011 /* Exceptions for "Grandmaster" folder in "Grandmaster" target */,
+				0A0000000000000000000011 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
 			);
-			path = Grandmaster;
+			path = StockPlay;
 			sourceTree = "<group>";
 		};
-		0A0000000000000000000025 /* GrandmasterTests */ = {
+		0A0000000000000000000025 /* StockPlayTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = GrandmasterTests;
+			path = StockPlayTests;
 			sourceTree = "<group>";
 		};
-		0A0000000000000000000035 /* GrandmasterUITests */ = {
+		0A0000000000000000000035 /* StockPlayUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = GrandmasterUITests;
+			path = StockPlayUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -88,9 +88,9 @@
 		0A0000000000000000000002 = {
 			isa = PBXGroup;
 			children = (
-				0A0000000000000000000005 /* Grandmaster */,
-				0A0000000000000000000025 /* GrandmasterTests */,
-				0A0000000000000000000035 /* GrandmasterUITests */,
+				0A0000000000000000000005 /* StockPlay */,
+				0A0000000000000000000025 /* StockPlayTests */,
+				0A0000000000000000000035 /* StockPlayUITests */,
 				0A0000000000000000000004 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -121,10 +121,11 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				0A0000000000000000000005 /* Grandmaster */,
+				0A0000000000000000000005 /* StockPlay */,
 			);
 			name = Grandmaster;
 			packageProductDependencies = (
+				CCFB1418F6882044427D374F /* SFEngine */,
 			);
 			productName = Grandmaster;
 			productReference = 0A0000000000000000000003 /* Grandmaster.app */;
@@ -144,7 +145,7 @@
 				0A0000000000000000000022 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				0A0000000000000000000025 /* GrandmasterTests */,
+				0A0000000000000000000025 /* StockPlayTests */,
 			);
 			name = GrandmasterTests;
 			packageProductDependencies = (
@@ -167,7 +168,7 @@
 				0A0000000000000000000032 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				0A0000000000000000000035 /* GrandmasterUITests */,
+				0A0000000000000000000035 /* StockPlayUITests */,
 			);
 			name = GrandmasterUITests;
 			packageProductDependencies = (
@@ -199,7 +200,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 0A000000000000000000000A /* Build configuration list for PBXProject "Grandmaster" */;
+			buildConfigurationList = 0A000000000000000000000A /* Build configuration list for PBXProject "StockPlay" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -208,6 +209,9 @@
 			);
 			mainGroup = 0A0000000000000000000002;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B4FFD9C6C54A6FACCD78B4F3 /* XCRemoteSwiftPackageReference "calcola" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0A0000000000000000000004 /* Products */;
 			projectDirPath = "";
@@ -410,7 +414,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Grandmaster/Info.plist;
+				INFOPLIST_FILE = StockPlay/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -443,7 +447,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Grandmaster/Info.plist;
+				INFOPLIST_FILE = StockPlay/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -540,7 +544,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		0A000000000000000000000A /* Build configuration list for PBXProject "Grandmaster" */ = {
+		0A000000000000000000000A /* Build configuration list for PBXProject "StockPlay" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				0A000000000000000000000B /* Debug */,
@@ -577,6 +581,29 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		B4FFD9C6C54A6FACCD78B4F3 /* XCRemoteSwiftPackageReference "calcola" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/fianchettolab/calcola.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.1.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		58D903BEC3893FB36BC55A87 /* StockfishKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = StockfishKit;
+		};
+		CCFB1418F6882044427D374F /* SFEngine */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4FFD9C6C54A6FACCD78B4F3 /* XCRemoteSwiftPackageReference "calcola" */;
+			productName = SFEngine;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 0A0000000000000000000001 /* Project object */;
 }

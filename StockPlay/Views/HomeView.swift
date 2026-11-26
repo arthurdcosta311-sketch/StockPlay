@@ -343,7 +343,7 @@ struct HomeView: View {
     }
 
     private var footer: some View {
-        Text("Ratings use the Elo formula — K 40 while provisional, then 24. Beating the grandmaster pays in full; losing barely costs a point.")
+        Text("Everyone starts at 500. Lose to the grandmaster and you fall, about six points a game; win and you climb about thirty, until you are no longer provisional.")
             .font(.system(size: 11))
             .foregroundStyle(Theme.textSecondary.opacity(0.8))
             .fixedSize(horizontal: false, vertical: true)

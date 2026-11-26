@@ -40,8 +40,8 @@ struct GameRecord: Codable, Identifiable, Sendable {
 }
 
 struct PlayerProfile: Codable, Sendable {
-    var rating: Int = 1200
-    var peakRating: Int = 1200
+    var rating: Int = EloRating.startingRating
+    var peakRating: Int = EloRating.startingRating
     var games: Int = 0
     var wins: Int = 0
     var losses: Int = 0
@@ -65,7 +65,7 @@ final class PlayerStore {
     private(set) var profile: PlayerProfile
 
     private let defaults: UserDefaults
-    private let storageKey = "grandmaster.player.profile.v1"
+    private let storageKey = "grandmaster.player.profile.v2"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults

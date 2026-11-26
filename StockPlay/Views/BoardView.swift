@@ -17,7 +17,8 @@ struct BoardView: View {
     let lastMove: Move?
     let badge: MoveBadge?
     let checkSquare: Square?
-    let premove: PremoveVisual?
+    let premoves: [PremoveStep]
+    let premoveCursor: Square?
     let animationToken: Int
     let onTap: (Square) -> Void
 
@@ -42,15 +43,13 @@ struct BoardView: View {
                 }
 
                 // Pieces ride above the squares on their own layer, so a move slides.
-                // A queued premove drags its piece to the target, ghosted, until it is played.
+                // A queued premove drags its piece along the chain, ghosted, until it is played.
                 ForEach(pieces) { item in
-                    let queued = premove.flatMap { visual -> Square? in
-                        return visual.from == item.square ? visual.to : nil
-                    }
+                    let end = chainEnd(from: item.square)
                     pieceView(item.piece, size: cell)
                         .frame(width: cell, height: cell)
-                        .position(center(of: queued ?? item.square, cell: cell))
-                        .opacity(queued == nil ? 1 : 0.45)
+                        .position(center(of: end, cell: cell))
+                        .opacity(end == item.square ? 1 : 0.45)
                         .transition(.opacity)
                 }
                 .allowsHitTesting(false)
@@ -68,7 +67,8 @@ struct BoardView: View {
         }
         .aspectRatio(1, contentMode: .fit)
         .animation(.easeOut(duration: 0.17), value: animationToken)
-        .animation(.easeOut(duration: 0.17), value: premove)
+        .animation(.easeOut(duration: 0.17), value: premoves)
+        .animation(.easeOut(duration: 0.17), value: premoveCursor)
         .animation(.spring(response: 0.32, dampingFraction: 0.7), value: badge)
     }
 
@@ -87,6 +87,17 @@ struct BoardView: View {
         return CGPoint(x: (CGFloat(column) + 0.5) * cell, y: (CGFloat(row) + 0.5) * cell)
     }
 
+    /// Where a piece ends up once every queued premove of its chain has played.
+    private func chainEnd(from start: Square) -> Square {
+        var square = start
+        var hops = 0
+        while hops < 16, let step = premoves.first(where: { $0.from == square }) {
+            square = step.to
+            hops += 1
+        }
+        return square
+    }
+
     /// The badge sits in the top corner of its square, inside the board.
     private func badgePosition(for square: Square, cell: CGFloat) -> CGPoint {
         let middle = center(of: square, cell: cell)
@@ -101,7 +112,7 @@ struct BoardView: View {
         let isLastMove = lastMove.map { $0.from == square || $0.to == square } ?? false
         let hasPiece = board.piece(at: square) != nil
         let isCheck = checkSquare == square
-        let isPremoveSquare = premove.map { $0.from == square || $0.to == square } ?? false
+        let isPremoveSquare = premoveCursor == square || premoves.contains { $0.from == square || $0.to == square }
 
         return ZStack {
             Rectangle()

@@ -54,10 +54,10 @@ struct BoardPiece: Identifiable, Sendable, Equatable {
     let square: Square
 }
 
-/// A move queued while the grandmaster is thinking.
-struct PremoveVisual: Equatable, Sendable {
+/// One queued premove: a piece and the square it should go to.
+struct PremoveStep: Equatable, Sendable {
     var from: Square
-    var to: Square?
+    var to: Square
 }
 
 @MainActor
@@ -89,9 +89,10 @@ final class GameController: Identifiable {
     var legalTargets: [Square] = []
     var isBoardFlipped: Bool
 
-    /// A premove: the piece you picked, and the square you want it to go to.
-    private(set) var premoveFrom: Square?
-    private(set) var premoveTo: Square?
+    /// Premoves: a chain of from → to hops, queued while the grandmaster is thinking.
+    private(set) var premoves: [PremoveStep] = []
+    /// The square the chain is being built from.
+    private(set) var premoveCursor: Square?
 
     /// Bumped on every board change so the view can animate moves.
     private(set) var animationToken = 0
@@ -148,8 +149,11 @@ final class GameController: Identifiable {
             return board.sideToMove == playerColor ? "Check — defend your king" : "Check"
         }
         if isEngineThinking {
-            if premoveTo != nil {
-                return "\(Self.opponentName) is thinking · premove set"
+            if !premoves.isEmpty {
+                return "\(Self.opponentName) is thinking · \(premoves.count) premove\(premoves.count == 1 ? "" : "s") queued"
+            }
+            if premoveCursor != nil {
+                return "\(Self.opponentName) is thinking · tap a square to premove"
             }
             return "\(Self.opponentName) is thinking"
         }
@@ -196,10 +200,34 @@ final class GameController: Identifiable {
         legalTargets = []
     }
 
-    /// The ghost a queued move is drawn with.
-    var premove: PremoveVisual? {
-        guard let from = premoveFrom else { return nil }
-        return PremoveVisual(from: from, to: premoveTo)
+    /// The pieces you have taken from the grandmaster, heaviest first.
+    var playerCaptures: [PieceKind] {
+        return capturedPieces(by: playerColor)
+    }
+
+    /// The pieces the grandmaster has taken from you.
+    var engineCaptures: [PieceKind] {
+        return capturedPieces(by: playerColor.opposite)
+    }
+
+    /// Material in pawns: positive when you are ahead.
+    var materialLead: Int {
+        let mine = playerCaptures.reduce(0) { $0 + $1.value }
+        let theirs = engineCaptures.reduce(0) { $0 + $1.value }
+        return (mine - theirs) / 100
+    }
+
+    private func capturedPieces(by color: ChessColor) -> [PieceKind] {
+        var captured: [PieceKind] = []
+        for (index, move) in moveHistory.enumerated() {
+            guard index < boardHistory.count else { break }
+            let before = boardHistory[index]
+            guard before.sideToMove == color else { continue }
+            let capturedSquare = move.isEnPassant ? Square(file: move.to.file, rank: move.from.rank) : move.to
+            guard let victim = before.piece(at: capturedSquare) else { continue }
+            captured.append(victim.kind)
+        }
+        return captured.sorted { $0.value > $1.value }
     }
 
     /// The pieces to draw, each carrying its identity so it slides rather than jumps.
@@ -223,7 +251,7 @@ final class GameController: Identifiable {
         if isPlayersTurn {
             handleOwnMoveTap(square)
         } else {
-            handlePremoveTap(square)
+            queuePremoveTap(square)
         }
     }
 
@@ -235,6 +263,8 @@ final class GameController: Identifiable {
                 return
             }
             clearSelection()
+            // Playing a move of your own drops whatever was queued.
+            clearPremoves()
             perform(move)
             return
         }
@@ -247,34 +277,34 @@ final class GameController: Identifiable {
         }
     }
 
-    /// Queues one move while the grandmaster is thinking; it plays itself when the turn comes.
-    private func handlePremoveTap(_ square: Square) {
-        if premoveFrom == nil {
-            if let piece = board.piece(at: square), piece.color == playerColor {
-                premoveFrom = square
-                premoveTo = nil
-                clearSelection()
+    /// Builds a chain of premoves while the grandmaster is thinking. Any number of hops.
+    private func queuePremoveTap(_ square: Square) {
+        if square == premoveCursor {
+            // Tapping the square the chain stands on takes the last hop back.
+            if let last = premoves.last, last.to == square {
+                premoves.removeLast()
+                premoveCursor = last.from
+            } else {
+                premoveCursor = nil
             }
             return
         }
 
-        if premoveFrom == square {
-            premoveFrom = nil
-            premoveTo = nil
+        if let piece = board.piece(at: square), piece.color == playerColor {
+            // A piece of yours starts, or continues, a chain from its square.
+            premoveCursor = square
+            clearSelection()
             return
         }
 
-        if premoveTo == square {
-            premoveTo = nil
-            return
-        }
-
-        premoveTo = square
+        guard let cursor = premoveCursor else { return }
+        premoves.append(PremoveStep(from: cursor, to: square))
+        premoveCursor = square
     }
 
-    func clearPremove() {
-        premoveFrom = nil
-        premoveTo = nil
+    func clearPremoves() {
+        premoves.removeAll()
+        premoveCursor = nil
     }
 
     func resign() {
@@ -311,7 +341,7 @@ final class GameController: Identifiable {
         guard undone > 0 else { return }
         animationToken += 1
         lastMove = nil
-        clearPremove()
+        clearPremoves()
         clearSelection()
         if board.sideToMove != playerColor {
             triggerEngineMove()
@@ -358,15 +388,19 @@ final class GameController: Identifiable {
         }
     }
 
-    /// Plays the queued premove if it is legal now, and drops it when it is not.
+    /// Plays the next queued premove if it is legal now, and drops the chain when it is not.
     private func resolvePremove() {
-        guard let from = premoveFrom, let to = premoveTo else {
-            clearPremove()
+        guard !premoves.isEmpty else {
+            premoveCursor = nil
             return
         }
-        let candidates = board.legalMoves.filter { $0.from == from && $0.to == to }
-        clearPremove()
+
+        let step = premoves.removeFirst()
+        premoveCursor = premoves.isEmpty ? nil : step.to
+
+        let candidates = board.legalMoves.filter { $0.from == step.from && $0.to == step.to }
         guard let move = candidates.first(where: { $0.promotion == .queen }) ?? candidates.first else {
+            clearPremoves()
             return
         }
         perform(move)
@@ -461,7 +495,7 @@ final class GameController: Identifiable {
         engineTask?.cancel()
         clockTask?.cancel()
         isEngineThinking = false
-        clearPremove()
+        clearPremoves()
         clearSelection()
 
         ratingChange = PlayerStore.shared.record(
@@ -551,7 +585,7 @@ final class GameController: Identifiable {
             guard !Task.isCancelled else { return }
             self.applyQuality(quality, bestSAN: bestSAN, at: entryIndex)
 
-            if let piece = self.sacrificedPiece(move, before: before, after: before.applying(move)) {
+            if quality.isPraise, let piece = self.sacrificedPiece(move, before: before, after: before.applying(move)) {
                 self.celebrate(piece)
             }
         }

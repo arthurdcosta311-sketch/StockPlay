@@ -17,6 +17,12 @@ struct PlayerRow: View {
     let clockText: String?
     let isActive: Bool
     let isEngine: Bool
+    /// The pieces this player has taken from the other side.
+    let captured: [PieceKind]
+    /// The colour of those captured pieces.
+    let capturedColor: ChessColor
+    /// How many pawns this player is ahead by.
+    let lead: Int
 
     var body: some View {
         HStack(spacing: 13) {
@@ -50,6 +56,17 @@ struct PlayerRow: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
+                if !captured.isEmpty || lead > 0 {
+                    HStack(spacing: 4) {
+                        CapturedRow(pieces: captured, color: capturedColor)
+                        if lead > 0 {
+                            Text("+\(lead)")
+                                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                .monospacedDigit()
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                    }
+                }
             }
 
             Spacer(minLength: 6)
@@ -74,6 +91,23 @@ struct PlayerRow: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(isActive ? Theme.gold.opacity(0.45) : Theme.hairline, lineWidth: 1)
         )
+    }
+}
+
+/// The little row of pieces one side has taken, the way chess.com shows them.
+struct CapturedRow: View {
+    let pieces: [PieceKind]
+    let color: ChessColor
+
+    var body: some View {
+        HStack(spacing: 0.5) {
+            ForEach(Array(pieces.enumerated()), id: \.offset) { _, kind in
+                Text(kind.outlineGlyph)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(color == .white ? Theme.ivory.opacity(0.92) : Theme.textSecondary)
+                    .shadow(color: .black.opacity(0.4), radius: 0.6, x: 0, y: 0.6)
+            }
+        }
     }
 }
 

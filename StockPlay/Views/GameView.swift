@@ -114,7 +114,10 @@ struct GameView: View {
             glyph: PieceKind.knight.glyph,
             clockText: controller.clockText(for: controller.playerColor.opposite),
             isActive: controller.phase == .playing && controller.board.sideToMove != controller.playerColor,
-            isEngine: true
+            isEngine: true,
+            captured: controller.engineCaptures,
+            capturedColor: controller.playerColor,
+            lead: -controller.materialLead
         )
     }
 
@@ -127,7 +130,10 @@ struct GameView: View {
             glyph: PieceKind.king.glyph,
             clockText: controller.clockText(for: controller.playerColor),
             isActive: controller.isPlayersTurn,
-            isEngine: false
+            isEngine: false,
+            captured: controller.playerCaptures,
+            capturedColor: controller.playerColor.opposite,
+            lead: controller.materialLead
         )
     }
 
@@ -141,7 +147,8 @@ struct GameView: View {
             lastMove: controller.lastMove,
             badge: controller.lastMoveBadge,
             checkSquare: controller.checkSquare,
-            premove: controller.premove,
+            premoves: controller.premoves,
+            premoveCursor: controller.premoveCursor,
             animationToken: controller.animationToken,
             onTap: { square in controller.handleTap(square) }
         )

@@ -127,10 +127,12 @@ struct GameView: View {
     private var boardArea: some View {
         BoardView(
             board: controller.board,
+            pieces: controller.boardPieces,
             flipped: controller.isBoardFlipped,
             selected: controller.selectedSquare,
             targets: controller.legalTargets,
             lastMove: controller.lastMove,
+            animationToken: controller.animationToken,
             onTap: { square in controller.handleTap(square) }
         )
         .frame(maxWidth: 520)

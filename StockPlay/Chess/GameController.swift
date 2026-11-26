@@ -45,6 +45,13 @@ struct MoveEntry: Identifiable, Sendable {
     let moveNumber: Int
 }
 
+/// A piece on the board with an identity that survives moves, so it can slide between squares.
+struct BoardPiece: Identifiable, Sendable, Equatable {
+    let id: Int
+    let piece: Piece
+    let square: Square
+}
+
 @MainActor
 @Observable
 final class GameController: Identifiable {
@@ -74,6 +81,12 @@ final class GameController: Identifiable {
     var legalTargets: [Square] = []
     var isBoardFlipped: Bool
 
+    /// Bumped on every board change so the view can animate moves.
+    private(set) var animationToken = 0
+
+    private var identities: [Int?]
+    private var identityHistory: [[Int?]] = []
+    private var nextIdentity: Int
     private var boardHistory: [ChessBoard] = []
     private var repetitions: [String: Int] = [:]
     private var engineTask: Task<Void, Never>?
@@ -91,6 +104,15 @@ final class GameController: Identifiable {
             .black: TimeInterval(timeControl.baseSeconds),
         ]
         self.repetitions = [ChessBoard.initial.positionKey: 1]
+
+        var startIdentities = [Int?](repeating: nil, count: 64)
+        var identity = 0
+        for index in 0..<64 where ChessBoard.initial.squares[index] != nil {
+            startIdentities[index] = identity
+            identity += 1
+        }
+        self.identities = startIdentities
+        self.nextIdentity = identity
     }
 
     // MARK: - Presentation helpers
@@ -148,6 +170,19 @@ final class GameController: Identifiable {
         legalTargets = []
     }
 
+    /// The pieces to draw, each carrying its identity so it slides rather than jumps.
+    var boardPieces: [BoardPiece] {
+        var result: [BoardPiece] = []
+        result.reserveCapacity(32)
+        for index in 0..<64 {
+            guard let piece = board.squares[index], let square = Square(index: index) else { continue }
+            // A stable fallback keeps a piece on screen even if an identity ever goes missing.
+            let identity = identities[index] ?? (10_000 + index)
+            result.append(BoardPiece(id: identity, piece: piece, square: square))
+        }
+        return result
+    }
+
     // MARK: - Player input
 
     func handleTap(_ square: Square) {
@@ -189,6 +224,9 @@ final class GameController: Identifiable {
             let key = board.positionKey
             repetitions[key] = max(0, (repetitions[key] ?? 1) - 1)
             board = boardHistory.removeLast()
+            if !identityHistory.isEmpty {
+                identities = identityHistory.removeLast()
+            }
             if !entries.isEmpty {
                 entries.removeLast()
             }
@@ -197,6 +235,7 @@ final class GameController: Identifiable {
         }
 
         guard undone > 0 else { return }
+        animationToken += 1
         lastMove = nil
         clearSelection()
         if board.sideToMove != playerColor {
@@ -213,9 +252,12 @@ final class GameController: Identifiable {
         let moveNumber = board.fullmoveNumber
 
         boardHistory.append(board)
+        identityHistory.append(identities)
         entries.append(MoveEntry(id: entries.count, san: san, color: mover, moveNumber: moveNumber))
 
         board = board.applying(move)
+        updateIdentities(for: move)
+        animationToken += 1
         lastMove = move
         repetitions[board.positionKey, default: 0] += 1
 
@@ -230,6 +272,31 @@ final class GameController: Identifiable {
         if board.sideToMove != playerColor {
             triggerEngineMove()
         }
+    }
+
+    /// Carries each piece's identity from its old square to its new one.
+    private func updateIdentities(for move: Move) {
+        let capturedSquare = move.isEnPassant ? Square(file: move.to.file, rank: move.from.rank) : move.to
+        identities[capturedSquare.index] = nil
+        identities[move.to.index] = nil
+
+        if move.isCastling {
+            let rank = move.from.rank
+            let kingside = move.to.file == 6
+            let rookFrom = Square(file: kingside ? 7 : 0, rank: rank)
+            let rookTo = Square(file: kingside ? 5 : 3, rank: rank)
+            identities[rookTo.index] = identities[rookFrom.index]
+            identities[rookFrom.index] = nil
+        }
+
+        if move.promotion != nil {
+            identities[move.to.index] = nextIdentity
+            nextIdentity += 1
+        } else {
+            identities[move.to.index] = identities[move.from.index]
+        }
+
+        identities[move.from.index] = nil
     }
 
     private func detectEnd() -> GameEnd? {

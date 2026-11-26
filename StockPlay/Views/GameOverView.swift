@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct GameOverView: View {
     let controller: GameController
@@ -24,8 +25,7 @@ struct GameOverView: View {
             Theme.surface.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                icon
-                    .padding(.top, 26)
+                header
 
                 VStack(spacing: 7) {
                     Text(outcome.title)
@@ -86,9 +86,56 @@ struct GameOverView: View {
         .sheet(isPresented: $showReview) {
             ReviewView(controller: controller)
         }
-        .presentationDetents([.height(470)])
+        .presentationDetents([.height(580)])
         .presentationBackground(Theme.surface)
         .interactiveDismissDisabled()
+    }
+
+    /// The result glyph, or the portraits of the sacrifices that won it.
+    @ViewBuilder
+    private var header: some View {
+        let pieces = controller.victorySacrifices
+        if pieces.isEmpty {
+            icon
+                .padding(.top, 24)
+        } else {
+            HStack(spacing: 10) {
+                ForEach(pieces, id: \.self) { piece in
+                    victoryPhoto(piece)
+                }
+            }
+            .padding(.top, 16)
+        }
+    }
+
+    private func victoryPhoto(_ piece: SacrificePiece) -> some View {
+        VStack(spacing: 6) {
+            if let image = SacrificeArtwork.image(names: piece.victoryNames, keyword: piece.victoryKeyword) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 132, height: 146)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Theme.gold.opacity(0.6), lineWidth: 1.5)
+                    )
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Theme.surfaceRaised)
+                    Text(piece.glyph)
+                        .font(.system(size: 46))
+                        .foregroundStyle(Theme.ivory)
+                }
+                .frame(width: 132, height: 146)
+            }
+
+            Text(piece.title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Theme.textSecondary)
+        }
     }
 
     private var icon: some View {

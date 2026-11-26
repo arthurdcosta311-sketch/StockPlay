@@ -3,7 +3,7 @@
 //  StockPlay
 //
 //  The easter egg: a rook or a bishop given away for a cheaper piece gets its
-//  picture and its shout.
+//  picture and its shout, and winning after one gets its own portrait.
 //
 
 import SwiftUI
@@ -27,6 +27,13 @@ enum SacrificePiece: String, Sendable {
         }
     }
 
+    var title: String {
+        switch self {
+        case .rook: return "Rook sacrifice"
+        case .bishop: return "Bishop sacrifice"
+        }
+    }
+
     /// The word its picture is expected to carry in its file name.
     var pictureKeyword: String {
         switch self {
@@ -41,27 +48,43 @@ enum SacrificePiece: String, Sendable {
         case .bishop: return ["TheBishop", "BishopMeme"]
         }
     }
+
+    /// The portrait shown when the sacrifice wins the game.
+    var victoryNames: [String] {
+        switch self {
+        case .rook: return ["Levy", "ChessLive"]
+        case .bishop: return ["Magnus"]
+        }
+    }
+
+    var victoryKeyword: String {
+        switch self {
+        case .rook: return "levy"
+        case .bishop: return "magnus"
+        }
+    }
 }
 
-enum SacrificeMemes {
+enum SacrificeArtwork {
     private static var cache: [String: UIImage] = [:]
     private static var tried = Set<String>()
 
-    static func image(for piece: SacrificePiece) -> UIImage? {
-        if let cached = cache[piece.rawValue] { return cached }
-        if tried.contains(piece.rawValue) { return nil }
+    static func image(names: [String], keyword: String) -> UIImage? {
+        guard let key = names.first else { return nil }
+        if let cached = cache[key] { return cached }
+        if tried.contains(key) { return nil }
 
-        let image = load(for: piece)
-        tried.insert(piece.rawValue)
+        let image = load(names: names, keyword: keyword)
+        tried.insert(key)
         if let image = image {
-            cache[piece.rawValue] = image
+            cache[key] = image
         }
         return image
     }
 
-    private static func load(for piece: SacrificePiece) -> UIImage? {
-        // An asset catalog entry with the right name, whichever spelling it uses.
-        for name in piece.pictureNames {
+    private static func load(names: [String], keyword: String) -> UIImage? {
+        // An asset catalog entry with one of the names.
+        for name in names {
             if let image = UIImage(named: name) {
                 return image
             }
@@ -70,7 +93,7 @@ enum SacrificeMemes {
         let extensions = ["png", "jpg", "jpeg", "webp", "heic"]
 
         // A file added to the app's folder, again by name.
-        for name in piece.pictureNames {
+        for name in names {
             for ext in extensions {
                 if let url = Bundle.main.url(forResource: name, withExtension: ext),
                    let image = UIImage(contentsOfFile: url.path) {
@@ -79,28 +102,14 @@ enum SacrificeMemes {
             }
         }
 
+        // Otherwise any picture whose file name mentions it.
         var loose: [URL] = []
         for ext in extensions {
             loose.append(contentsOf: Bundle.main.urls(forResourcesWithExtension: ext, subdirectory: nil) ?? [])
         }
 
-        // Any picture whose file name mentions the piece.
-        if let named = loose.first(where: { $0.lastPathComponent.lowercased().contains(piece.pictureKeyword) }),
+        if let named = loose.first(where: { $0.lastPathComponent.lowercased().contains(keyword) }),
            let image = UIImage(contentsOfFile: named.path) {
-            return image
-        }
-
-        // A single loose picture in the app can only be the one added for this.
-        let pictures = loose.compactMap { url -> (URL, Int)? in
-            guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
-                  let size = attributes[.size] as? NSNumber,
-                  size.intValue > 60_000 else {
-                return nil
-            }
-            return (url, size.intValue)
-        }
-
-        if pictures.count == 1, let only = pictures.first, let image = UIImage(contentsOfFile: only.0.path) {
             return image
         }
 
@@ -143,7 +152,7 @@ struct SacrificeOverlay: View {
 
     @ViewBuilder
     private var picture: some View {
-        if let image = SacrificeMemes.image(for: piece) {
+        if let image = SacrificeArtwork.image(names: piece.pictureNames, keyword: piece.pictureKeyword) {
             Image(uiImage: image)
                 .resizable()
                 .scaledToFit()

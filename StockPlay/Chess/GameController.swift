@@ -108,6 +108,8 @@ final class GameController: Identifiable {
     private(set) var isReviewing = false
     /// The sacrifice easter egg, up for one second.
     private(set) var sacrificeCelebration: SacrificePiece?
+    /// Sacrifices the engine approved, for the result screen once you win.
+    private(set) var goodSacrifices: [SacrificePiece] = []
 
     private var classificationTask: Task<Void, Never>?
     private var reviewTask: Task<Void, Never>?
@@ -476,6 +478,11 @@ final class GameController: Identifiable {
             guard let move = chosen else {
                 if let finished = self.detectEnd() {
                     self.finish(finished)
+                    return
+                }
+                // The engine had no answer at all: play any legal move so the game never stalls.
+                if let fallback = self.board.legalMoves.randomElement() {
+                    self.perform(fallback)
                 }
                 return
             }
@@ -587,8 +594,22 @@ final class GameController: Identifiable {
 
             if quality.isPraise, let piece = self.sacrificedPiece(move, before: before, after: before.applying(move)) {
                 self.celebrate(piece)
+                if quality == .best || quality == .excellent || quality == .brilliant {
+                    self.recordSacrifice(piece)
+                }
             }
         }
+    }
+
+    /// The sacrifices a winning game should show a portrait for.
+    var victorySacrifices: [SacrificePiece] {
+        guard let end = end, end.outcome(for: playerColor) == .win else { return [] }
+        return goodSacrifices
+    }
+
+    private func recordSacrifice(_ piece: SacrificePiece) {
+        guard !goodSacrifices.contains(piece) else { return }
+        goodSacrifices.append(piece)
     }
 
     /// A rook or a bishop left where a cheaper piece can take it: a real sacrifice.

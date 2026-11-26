@@ -2,8 +2,8 @@
 //  BoardView.swift
 //  StockPlay
 //
-//  The board: ivory and slate squares, filled glyphs, last-move and legal-move
-//  hints, and pieces that slide between squares the way chess.com's do.
+//  The board: ivory and slate squares, last-move and legal-move hints, and
+//  pieces that slide between squares the way chess.com's do.
 //
 
 import SwiftUI
@@ -40,7 +40,7 @@ struct BoardView: View {
 
                 // Pieces ride above the squares on their own layer, so a move slides.
                 ForEach(pieces) { item in
-                    pieceGlyph(item.piece, size: cell)
+                    pieceView(item.piece, size: cell)
                         .frame(width: cell, height: cell)
                         .position(center(of: item.square, cell: cell))
                         .transition(.opacity)
@@ -104,8 +104,39 @@ struct BoardView: View {
 
     // MARK: - Pieces
 
-    /// Ivory pieces carry a dark rim, black pieces a pale one, so both read on both squares.
-    private func pieceGlyph(_ piece: Piece, size: CGFloat) -> some View {
+    @ViewBuilder
+    private func pieceView(_ piece: Piece, size: CGFloat) -> some View {
+        if piece.kind == .pawn {
+            pawnView(piece, size: size)
+        } else {
+            glyphView(piece, size: size)
+        }
+    }
+
+    /// iOS draws the Unicode pawn (U+265F) as a colour emoji, which ignores any tint,
+    /// so the pawn is drawn as a shape and takes the piece colour like the others.
+    private func pawnView(_ piece: Piece, size: CGFloat) -> some View {
+        let fill = piece.color == .white ? Theme.ivory : Theme.ink
+        let rimColor = piece.color == .white ? Theme.ink.opacity(0.92) : Theme.ivory.opacity(0.55)
+        let pawnSize = size * 0.86
+
+        return ZStack {
+            PawnSilhouette(size: pawnSize * 1.06)
+                .foregroundStyle(rimColor)
+            PawnSilhouette(size: pawnSize)
+                .foregroundStyle(fill)
+        }
+        .frame(width: size, height: size)
+        .shadow(
+            color: .black.opacity(piece.color == .white ? 0.20 : 0.30),
+            radius: size * 0.015,
+            x: 0,
+            y: size * 0.012
+        )
+    }
+
+    /// The other pieces keep the font glyphs: ivory with a dark rim, black with a pale one.
+    private func glyphView(_ piece: Piece, size: CGFloat) -> some View {
         let glyphSize = size * 0.74
         let rim = max(1.0, size * 0.028)
         let fill = piece.color == .white ? Theme.ivory : Theme.ink
@@ -141,5 +172,55 @@ struct BoardView: View {
                     y: size * 0.012
                 )
         }
+    }
+}
+
+/// A pawn silhouette: head, collar, stem and base, sized to its frame.
+private struct PawnSilhouette: View {
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.030, style: .continuous)
+                .frame(width: size * 0.46, height: size * 0.130)
+                .offset(y: size * 0.225)
+
+            Capsule(style: .continuous)
+                .frame(width: size * 0.30, height: size * 0.075)
+                .offset(y: size * 0.115)
+
+            PawnBody()
+                .frame(width: size * 0.38, height: size * 0.24)
+                .offset(y: size * 0.010)
+
+            Circle()
+                .frame(width: size * 0.26, height: size * 0.26)
+                .offset(y: size * -0.200)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+/// The stem of the pawn: a trapezoid with gently curved sides.
+private struct PawnBody: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let width = rect.width
+        let height = rect.height
+
+        path.move(to: CGPoint(x: rect.minX + width * 0.22, y: rect.minY))
+        path.addCurve(
+            to: CGPoint(x: rect.minX + width * 0.05, y: rect.maxY),
+            control1: CGPoint(x: rect.minX + width * 0.12, y: rect.minY + height * 0.45),
+            control2: CGPoint(x: rect.minX + width * 0.01, y: rect.minY + height * 0.78)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX - width * 0.05, y: rect.maxY))
+        path.addCurve(
+            to: CGPoint(x: rect.maxX - width * 0.22, y: rect.minY),
+            control1: CGPoint(x: rect.maxX - width * 0.01, y: rect.minY + height * 0.78),
+            control2: CGPoint(x: rect.maxX - width * 0.12, y: rect.minY + height * 0.45)
+        )
+        path.closeSubpath()
+        return path
     }
 }

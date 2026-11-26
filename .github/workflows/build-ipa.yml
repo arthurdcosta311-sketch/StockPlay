@@ -1,0 +1,74 @@
+name: Unsigned IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build the unsigned IPA
+    runs-on: macos-26
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Show the toolchain
+        run: |
+          xcodebuild -version
+          sw_vers
+
+      - name: Build for iPhone without signing
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project StockPlay.xcodeproj \
+            -scheme Grandmaster \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package the IPA
+        run: |
+          set -euo pipefail
+          PRODUCT_DIR="build/Build/Products/Release-iphoneos"
+          APP=$(find "$PRODUCT_DIR" -maxdepth 1 -name '*.app' -print -quit)
+          echo "App bundle: $APP"
+          test -n "$APP" || { echo "No .app was built"; exit 1; }
+          rm -rf Payload StockPlay-unsigned.ipa
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qry StockPlay-unsigned.ipa Payload
+          rm -rf Payload
+          ls -lh StockPlay-unsigned.ipa
+          unzip -l StockPlay-unsigned.ipa | head -20
+
+      - name: Upload the IPA as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StockPlay-unsigned-ipa
+          path: StockPlay-unsigned.ipa
+          if-no-files-found: error
+
+      - name: Publish the IPA to Releases
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view latest-build >/dev/null 2>&1 || \
+            gh release create latest-build \
+              --title "Latest unsigned build" \
+              --notes "Unsigned IPA of the newest commit on main. It needs signing before an iPhone will install it." \
+              --latest
+          gh release upload latest-build StockPlay-unsigned.ipa --clobber
+          gh release view latest-build --json assets --jq '.assets[].name'

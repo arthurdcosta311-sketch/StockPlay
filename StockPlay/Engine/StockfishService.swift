@@ -99,6 +99,21 @@ final class StockfishService {
         return nil
     }
 
+    /// The engine's verdict on a position: its move and how good the position is.
+    func assess(fen: String, milliseconds: Int) async -> EngineAssessment? {
+        guard let runner = runner else { return nil }
+        guard let assessment = await runner.assess(fen: fen, milliseconds: milliseconds) else {
+            return nil
+        }
+        failures = 0
+        return EngineAssessment(
+            bestMove: assessment.move,
+            score: assessment.score,
+            mate: assessment.mate,
+            fromStockfish: true
+        )
+    }
+
     // MARK: - Network file
 
     private func networkFileURL() async -> URL? {

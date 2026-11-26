@@ -26,6 +26,15 @@ enum Theme {
     static let win = Color(red: 0.541, green: 0.769, blue: 0.518)
     static let loss = Color(red: 0.851, green: 0.451, blue: 0.427)
 
+    // Move verdicts, the way chess.com colours them.
+    static let brilliant = Color(red: 0.149, green: 0.741, blue: 0.647)
+    static let best = Color(red: 0.506, green: 0.714, blue: 0.298)
+    static let good = Color(red: 0.596, green: 0.729, blue: 0.404)
+    static let book = Color(red: 0.710, green: 0.545, blue: 0.400)
+    static let inaccuracy = Color(red: 0.969, green: 0.776, blue: 0.192)
+    static let mistake = Color(red: 1.000, green: 0.643, blue: 0.349)
+    static let blunder = Color(red: 0.980, green: 0.255, blue: 0.176)
+
     static func color(for outcome: GameOutcome) -> Color {
         switch outcome {
         case .win: return win

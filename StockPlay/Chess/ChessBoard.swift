@@ -326,6 +326,65 @@ struct ChessBoard: Sendable {
         return false
     }
 
+    /// True when one of `color`'s pieces worth less than `value` attacks `square`.
+    func isAttackedByCheaperPiece(_ square: Square, by color: ChessColor, than value: Int) -> Bool {
+        let pawnRank = square.rank - (color == .white ? 1 : -1)
+        if PieceKind.pawn.value < value {
+            for fileOffset in [-1, 1] {
+                let file = square.file + fileOffset
+                guard (0..<8).contains(file), (0..<8).contains(pawnRank) else { continue }
+                if let piece = squares[pawnRank * 8 + file], piece.color == color, piece.kind == .pawn {
+                    return true
+                }
+            }
+        }
+
+        if PieceKind.knight.value < value {
+            for offset in ChessBoard.knightOffsets {
+                let file = square.file + offset.0
+                let rank = square.rank + offset.1
+                guard (0..<8).contains(file), (0..<8).contains(rank) else { continue }
+                if let piece = squares[rank * 8 + file], piece.color == color, piece.kind == .knight {
+                    return true
+                }
+            }
+        }
+
+        for direction in ChessBoard.rookDirections {
+            var file = square.file + direction.0
+            var rank = square.rank + direction.1
+            while (0..<8).contains(file), (0..<8).contains(rank) {
+                if let piece = squares[rank * 8 + file] {
+                    if piece.color == color, piece.kind.value < value,
+                       piece.kind == .rook || piece.kind == .queen {
+                        return true
+                    }
+                    break
+                }
+                file += direction.0
+                rank += direction.1
+            }
+        }
+
+        for direction in ChessBoard.bishopDirections {
+            var file = square.file + direction.0
+            var rank = square.rank + direction.1
+            while (0..<8).contains(file), (0..<8).contains(rank) {
+                if let piece = squares[rank * 8 + file] {
+                    if piece.color == color, piece.kind.value < value,
+                       piece.kind == .bishop || piece.kind == .queen {
+                        return true
+                    }
+                    break
+                }
+                file += direction.0
+                rank += direction.1
+            }
+        }
+
+        return false
+    }
+
     // MARK: - Move generation
 
     static let knightOffsets: [(Int, Int)] = [(1, 2), (2, 1), (2, -1), (1, -2), (-1, -2), (-2, -1), (-2, 1), (-1, 2)]

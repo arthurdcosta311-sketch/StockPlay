@@ -47,6 +47,16 @@ enum OpeningBook {
 
     private static let candidates: [String: [String]] = build()
 
+    static func contains(_ board: ChessBoard) -> Bool {
+        return candidates[board.positionKey] != nil
+    }
+
+    /// Whether this exact move is theory in this position.
+    static func isBookMove(_ move: Move, in board: ChessBoard) -> Bool {
+        guard let options = candidates[board.positionKey] else { return false }
+        return options.contains(move.uci)
+    }
+
     static func move(in board: ChessBoard) -> Move? {
         guard let uci = candidates[board.positionKey]?.randomElement() else { return nil }
         let matches = board.legalMoves.filter { $0.uci == uci }
@@ -71,34 +81,43 @@ enum OpeningBook {
     }
 }
 
+struct NativeAssessment: Sendable {
+    var move: Move
+    /// Centipawns from the side to move, with a mate folded into a large score.
+    var score: Int
+}
+
 final class ChessEngine {
     /// Best move for the side to move, or nil when the position is already over.
     func searchBestMove(in board: ChessBoard, limits: EngineLimits = EngineLimits()) -> Move? {
         if let bookMove = OpeningBook.move(in: board) {
             return bookMove
         }
+        return search(in: board, limits: limits)?.move
+    }
 
+    /// The engine's choice together with the score it expects.
+    func search(in board: ChessBoard, limits: EngineLimits = EngineLimits()) -> NativeAssessment? {
         let rootMoves = board.legalMoves
         guard let first = rootMoves.first else { return nil }
-        guard rootMoves.count > 1 else { return first }
+        guard rootMoves.count > 1 else { return NativeAssessment(move: first, score: 0) }
 
         let search = Search(deadline: Date().addingTimeInterval(limits.timeLimit))
         var bestMove = first
         var bestScore = -Search.mateScore
 
         for depth in 1...max(1, limits.maxDepth) {
-            var alpha = -Search.mateScore
-            let beta = Search.mateScore
             var iterationMove = bestMove
             var iterationScore = -Search.mateScore
             var completed = true
 
             for move in search.ordered(rootMoves, board: board) {
+                // A full window at the root keeps every score exact, so no move wins on a bound.
                 let score = -search.negamax(
                     board.applying(move),
                     depth: depth - 1,
-                    alpha: -beta,
-                    beta: -alpha,
+                    alpha: -Search.mateScore,
+                    beta: Search.mateScore,
                     ply: 1
                 )
                 if search.cancelled {
@@ -110,9 +129,6 @@ final class ChessEngine {
                 if jittered > iterationScore {
                     iterationScore = jittered
                     iterationMove = move
-                }
-                if score > alpha {
-                    alpha = score
                 }
             }
 
@@ -126,7 +142,20 @@ final class ChessEngine {
             }
         }
 
-        return bestMove
+        return NativeAssessment(move: bestMove, score: normalized(bestScore))
+    }
+
+    /// Folds a mate score into the range the review compares.
+    private func normalized(_ score: Int) -> Int {
+        if score > Search.mateScore - 1_000 {
+            let pliesToMate = Search.mateScore - score
+            return ReviewMath.mateCentipawns - pliesToMate
+        }
+        if score < -Search.mateScore + 1_000 {
+            let pliesToMate = Search.mateScore + score
+            return -ReviewMath.mateCentipawns - pliesToMate
+        }
+        return score
     }
 }
 

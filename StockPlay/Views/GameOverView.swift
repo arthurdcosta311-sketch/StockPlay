@@ -13,6 +13,7 @@ struct GameOverView: View {
     let onDone: () -> Void
 
     @State private var store = PlayerStore.shared
+    @State private var showReview = false
 
     private var outcome: GameOutcome {
         return controller.end?.outcome(for: controller.playerColor) ?? .draw
@@ -43,6 +44,23 @@ struct GameOverView: View {
 
                 Spacer(minLength: 16)
 
+                Button {
+                    showReview = true
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "chart.bar.doc.horizontal")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("Game review")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .foregroundStyle(Theme.textPrimary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 13)
+                    .background(Theme.surfaceRaised, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+
                 Button(action: onRematch) {
                     Text("Rematch")
                         .font(.system(size: 16, weight: .semibold))
@@ -65,7 +83,10 @@ struct GameOverView: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 16)
         }
-        .presentationDetents([.height(430)])
+        .sheet(isPresented: $showReview) {
+            ReviewView(controller: controller)
+        }
+        .presentationDetents([.height(470)])
         .presentationBackground(Theme.surface)
         .interactiveDismissDisabled()
     }

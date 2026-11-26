@@ -14,6 +14,14 @@ private final class LineBox: @unchecked Sendable {
     var handler: ((String) -> Void)?
 }
 
+struct StockfishAssessment: Sendable {
+    var move: String?
+    /// Centipawns from the side to move, with a mate folded into a large score.
+    var score: Int
+    /// Mate in this many moves, positive when the side to move mates.
+    var mate: Int?
+}
+
 /// Owns one `SFEngine`. Not thread safe: `StockfishRunner` serialises it.
 final class StockfishSession: @unchecked Sendable {
     private let engine: SFEngine
@@ -23,6 +31,9 @@ final class StockfishSession: @unchecked Sendable {
     private var isReady = false
     private var moveSemaphore: DispatchSemaphore?
     private var pendingMove: String?
+    private var latestScore = 0
+    private var latestMate: Int?
+    private var latestPVMove: String?
 
     init(networkURL: URL) {
         let box = LineBox()
@@ -58,12 +69,15 @@ final class StockfishSession: @unchecked Sendable {
         return waited == .success && ready
     }
 
-    /// One search. Returns the engine's move in long algebraic notation, or nil.
-    func bestMove(fen: String, milliseconds: Int, timeout: TimeInterval = 8) -> String? {
+    /// One search: the engine's move and the score it expects, from the side to move.
+    func assess(fen: String, milliseconds: Int, timeout: TimeInterval = 8) -> StockfishAssessment? {
         let semaphore = DispatchSemaphore(value: 0)
 
         lock.lock()
         pendingMove = nil
+        latestScore = 0
+        latestMate = nil
+        latestPVMove = nil
         moveSemaphore = semaphore
         lock.unlock()
 
@@ -73,18 +87,23 @@ final class StockfishSession: @unchecked Sendable {
         let waited = semaphore.wait(timeout: .now() + timeout)
 
         lock.lock()
-        let move = pendingMove
+        let move = pendingMove ?? latestPVMove
+        let score = latestScore
+        let mate = latestMate
         pendingMove = nil
         moveSemaphore = nil
         lock.unlock()
 
-        guard waited == .success, let move = move, move != "0000", move != "(none)" else {
-            if waited != .success {
-                engine.sendCommand("stop")
-            }
+        guard waited == .success else {
+            engine.sendCommand("stop")
             return nil
         }
-        return move
+        guard let best = move, best != "0000", best != "(none)" else { return nil }
+        return StockfishAssessment(move: best, score: score, mate: mate)
+    }
+
+    func bestMove(fen: String, milliseconds: Int, timeout: TimeInterval = 8) -> String? {
+        return assess(fen: fen, milliseconds: milliseconds, timeout: timeout)?.move
     }
 
     /// Terminal: the instance cannot be reused after this.
@@ -123,6 +142,46 @@ final class StockfishSession: @unchecked Sendable {
             pendingMove = nil
             lock.unlock()
             semaphore?.signal()
+            return
+        }
+        if trimmed.hasPrefix("info") {
+            parseInfo(trimmed)
+        }
+    }
+
+    /// Picks the score and the first move of the principal variation out of one info line.
+    private func parseInfo(_ line: String) {
+        let tokens = line.split(separator: " ").map(String.init)
+        var index = 0
+
+        while index < tokens.count {
+            let token = tokens[index]
+
+            if token == "score", index + 2 < tokens.count, let value = Int(tokens[index + 2]) {
+                let kind = tokens[index + 1]
+                lock.lock()
+                if kind == "cp" {
+                    latestScore = value
+                    latestMate = nil
+                } else if kind == "mate" {
+                    latestMate = value
+                    latestScore = value > 0
+                        ? ReviewMath.mateCentipawns - value * 10
+                        : -ReviewMath.mateCentipawns - value * 10
+                }
+                lock.unlock()
+                index += 3
+                continue
+            }
+
+            if token == "pv", index + 1 < tokens.count {
+                lock.lock()
+                latestPVMove = tokens[index + 1]
+                lock.unlock()
+                return
+            }
+
+            index += 1
         }
     }
 }
@@ -137,5 +196,9 @@ actor StockfishRunner {
 
     func bestMove(fen: String, milliseconds: Int) -> String? {
         return session.bestMove(fen: fen, milliseconds: milliseconds)
+    }
+
+    func assess(fen: String, milliseconds: Int) -> StockfishAssessment? {
+        return session.assess(fen: fen, milliseconds: milliseconds)
     }
 }

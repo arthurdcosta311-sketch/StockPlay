@@ -43,6 +43,8 @@ struct MoveEntry: Identifiable, Sendable {
     let san: String
     let color: ChessColor
     let moveNumber: Int
+    var quality: MoveQuality?
+    var bestSAN: String?
 }
 
 /// A piece on the board with an identity that survives moves, so it can slide between squares.
@@ -88,6 +90,14 @@ final class GameController: Identifiable {
     private var identityHistory: [[Int?]] = []
     private var nextIdentity: Int
     private var boardHistory: [ChessBoard] = []
+    private var moveHistory: [Move] = []
+
+    private(set) var review: GameReview?
+    private(set) var reviewProgress: Double = 0
+    private(set) var isReviewing = false
+
+    private var classificationTask: Task<Void, Never>?
+    private var reviewTask: Task<Void, Never>?
     private var repetitions: [String: Int] = [:]
     private var engineTask: Task<Void, Never>?
     private var clockTask: Task<Void, Never>?
@@ -217,6 +227,7 @@ final class GameController: Identifiable {
     func takeback() {
         guard phase == .playing else { return }
         engineTask?.cancel()
+        classificationTask?.cancel()
         isEngineThinking = false
 
         var undone = 0
@@ -229,6 +240,9 @@ final class GameController: Identifiable {
             }
             if !entries.isEmpty {
                 entries.removeLast()
+            }
+            if !moveHistory.isEmpty {
+                moveHistory.removeLast()
             }
             undone += 1
             if board.sideToMove == playerColor { break }
@@ -251,15 +265,22 @@ final class GameController: Identifiable {
         let mover = board.sideToMove
         let moveNumber = board.fullmoveNumber
 
+        let previousPosition = board
         boardHistory.append(board)
         identityHistory.append(identities)
-        entries.append(MoveEntry(id: entries.count, san: san, color: mover, moveNumber: moveNumber))
+        let entryIndex = entries.count
+        entries.append(MoveEntry(id: entryIndex, san: san, color: mover, moveNumber: moveNumber))
+        moveHistory.append(move)
 
         board = board.applying(move)
         updateIdentities(for: move)
         animationToken += 1
         lastMove = move
         repetitions[board.positionKey, default: 0] += 1
+
+        if mover == playerColor {
+            classifyLive(move: move, before: previousPosition, entryIndex: entryIndex)
+        }
 
         if !timeControl.isUnlimited, let remaining = clocks[mover] {
             clocks[mover] = remaining + TimeInterval(timeControl.incrementSeconds)
@@ -396,6 +417,164 @@ final class GameController: Identifiable {
                 self.clocks[side] = remaining
             }
         }
+    }
+
+    // MARK: - Move quality
+
+    /// Asks the engine what the best move was, and what the move you played cost.
+    private func classifyLive(move: Move, before: ChessBoard, entryIndex: Int) {
+        classificationTask?.cancel()
+        let isBook = OpeningBook.isBookMove(move, in: before)
+
+        classificationTask = Task { [weak self] in
+            guard let self = self else { return }
+
+            var quality: MoveQuality = .book
+            var bestSAN: String? = nil
+
+            if !isBook {
+                let beforeAssessment = await GameAnalysis.assess(before, milliseconds: GameAnalysis.liveMilliseconds)
+                if Task.isCancelled { return }
+                let afterPosition = before.applying(move)
+                let afterAssessment = await GameAnalysis.assess(afterPosition, milliseconds: GameAnalysis.liveMilliseconds)
+                if Task.isCancelled { return }
+
+                let scoreBefore = beforeAssessment.score
+                let scoreAfter = -afterAssessment.score
+                let winDrop = ReviewMath.winPercent(centipawns: scoreBefore) - ReviewMath.winPercent(centipawns: scoreAfter)
+
+                let isMate = afterPosition.legalMoves.isEmpty && afterPosition.isInCheck(afterPosition.sideToMove)
+                let isBest = isMate || beforeAssessment.bestMove == move.uci
+                let brilliant = isBest && self.isSacrifice(move, before: before, after: afterPosition, scoreBefore: scoreBefore)
+                quality = ReviewMath.classify(winDrop: winDrop, isBestMove: isBest, isBook: false, isBrilliant: brilliant)
+
+                if !isBest, let bestUCI = beforeAssessment.bestMove,
+                   let best = before.legalMoves.first(where: { $0.uci == bestUCI }) {
+                    bestSAN = before.san(for: best)
+                }
+            }
+
+            guard !Task.isCancelled else { return }
+            self.applyQuality(quality, bestSAN: bestSAN, at: entryIndex)
+        }
+    }
+
+    private func applyQuality(_ quality: MoveQuality, bestSAN: String?, at index: Int) {
+        guard entries.indices.contains(index), entries[index].id == index else { return }
+        entries[index].quality = quality
+        entries[index].bestSAN = bestSAN
+    }
+
+    /// A sacrifice: the engine's own move, giving away a piece worth more than its attacker.
+    private func isSacrifice(_ move: Move, before: ChessBoard, after: ChessBoard, scoreBefore: Int) -> Bool {
+        guard scoreBefore > 50 else { return false }
+        guard let piece = before.piece(at: move.from), piece.kind != .pawn, piece.kind != .king else {
+            return false
+        }
+        return after.isAttackedByCheaperPiece(move.to, by: piece.color.opposite, than: piece.kind.value)
+    }
+
+    // MARK: - Game review
+
+    func startReview() {
+        guard review == nil, !isReviewing else { return }
+        guard !moveHistory.isEmpty else { return }
+
+        let positions = boardHistory + [board]
+        guard positions.count == moveHistory.count + 1 else { return }
+
+        let moves = moveHistory
+        isReviewing = true
+        reviewProgress = 0
+
+        reviewTask = Task { [weak self] in
+            guard let self = self else { return }
+
+            var assessments: [EngineAssessment] = []
+            assessments.reserveCapacity(positions.count)
+
+            for (index, position) in positions.enumerated() {
+                if Task.isCancelled { return }
+                let assessment = await GameAnalysis.assess(position, milliseconds: GameAnalysis.reviewMilliseconds)
+                assessments.append(assessment)
+                self.reviewProgress = Double(index + 1) / Double(positions.count)
+            }
+
+            guard !Task.isCancelled, assessments.count == positions.count else {
+                self.isReviewing = false
+                return
+            }
+
+            self.review = self.buildReview(positions: positions, moves: moves, assessments: assessments)
+            self.isReviewing = false
+        }
+    }
+
+    private func buildReview(positions: [ChessBoard], moves: [Move], assessments: [EngineAssessment]) -> GameReview {
+        var items: [ReviewItem] = []
+        var playerAccuracies: [Double] = []
+        var engineAccuracies: [Double] = []
+        var playerCounts: [MoveQuality: Int] = [:]
+        var engineCounts: [MoveQuality: Int] = [:]
+
+        for (index, move) in moves.enumerated() {
+            guard index + 1 < assessments.count, index < positions.count else { break }
+            let before = positions[index]
+            let after = before.applying(move)
+            let mover = before.sideToMove
+
+            let scoreBefore = assessments[index].score
+            let scoreAfter = -assessments[index + 1].score
+            let winDrop = ReviewMath.winPercent(centipawns: scoreBefore) - ReviewMath.winPercent(centipawns: scoreAfter)
+
+            let isBook = OpeningBook.isBookMove(move, in: before)
+            let bestUCI = assessments[index].bestMove
+            let isMate = after.legalMoves.isEmpty && after.isInCheck(after.sideToMove)
+            let isBest = isMate || bestUCI == move.uci
+            let brilliant = isBest && isSacrifice(move, before: before, after: after, scoreBefore: scoreBefore)
+            let quality = ReviewMath.classify(winDrop: winDrop, isBestMove: isBest, isBook: isBook, isBrilliant: brilliant)
+
+            var bestSAN: String? = nil
+            if !isBest, let bestUCI = bestUCI, let best = before.legalMoves.first(where: { $0.uci == bestUCI }) {
+                bestSAN = before.san(for: best)
+            }
+
+            let accuracy = ReviewMath.accuracy(winDrop: winDrop)
+            if mover == playerColor {
+                playerAccuracies.append(accuracy)
+                playerCounts[quality, default: 0] += 1
+            } else {
+                engineAccuracies.append(accuracy)
+                engineCounts[quality, default: 0] += 1
+            }
+
+            let san = entries.indices.contains(index) ? entries[index].san : move.uci
+            items.append(
+                ReviewItem(
+                    id: index,
+                    moveNumber: before.fullmoveNumber,
+                    color: mover,
+                    san: san,
+                    quality: quality,
+                    bestSAN: bestSAN,
+                    winDrop: winDrop
+                )
+            )
+        }
+
+        return GameReview(
+            items: items,
+            playerAccuracy: Int(average(playerAccuracies).rounded()),
+            engineAccuracy: Int(average(engineAccuracies).rounded()),
+            playerCounts: playerCounts,
+            engineCounts: engineCounts,
+            playerColor: playerColor
+        )
+    }
+
+    private func average(_ values: [Double]) -> Double {
+        guard !values.isEmpty else { return 0 }
+        return values.reduce(0, +) / Double(values.count)
     }
 
     // MARK: - Score sheet

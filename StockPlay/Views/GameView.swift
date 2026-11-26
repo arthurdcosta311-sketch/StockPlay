@@ -155,12 +155,31 @@ struct GameView: View {
                 .foregroundStyle(Theme.textSecondary)
                 .lineLimit(1)
             Spacer(minLength: 0)
-            Text("Move \(max(1, controller.board.fullmoveNumber))")
-                .font(.system(size: 11, weight: .medium, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(Theme.textSecondary.opacity(0.75))
+            if let verdict = lastVerdict {
+                HStack(spacing: 4) {
+                    Image(systemName: verdict.quality.symbol)
+                        .font(.system(size: 9, weight: .bold))
+                    Text(verdict.quality.title)
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundStyle(verdict.quality.color)
+            } else {
+                Text("Move \(max(1, controller.board.fullmoveNumber))")
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.textSecondary.opacity(0.75))
+            }
         }
         .frame(height: 18)
+    }
+
+    /// The engine's verdict on the player's latest move, once it has one.
+    private var lastVerdict: (quality: MoveQuality, best: String?)? {
+        guard let entry = controller.entries.last(where: { $0.color == controller.playerColor }),
+              let quality = entry.quality else {
+            return nil
+        }
+        return (quality, entry.bestSAN)
     }
 
     private var moveStrip: some View {
@@ -172,12 +191,19 @@ struct GameView: View {
                         .foregroundStyle(Theme.textSecondary.opacity(0.6))
                 }
                 ForEach(controller.entries) { entry in
-                    Text(entry.color == .white ? "\(entry.moveNumber). \(entry.san)" : entry.san)
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
-                        .foregroundStyle(entry.color == controller.playerColor ? Theme.textPrimary : Theme.textSecondary)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 4)
-                        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    HStack(spacing: 4) {
+                        Text(entry.color == .white ? "\(entry.moveNumber). \(entry.san)" : entry.san)
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundStyle(entry.color == controller.playerColor ? Theme.textPrimary : Theme.textSecondary)
+                        if let quality = entry.quality {
+                            Image(systemName: quality.symbol)
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(quality.color)
+                        }
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 }
             }
             .padding(.horizontal, 1)

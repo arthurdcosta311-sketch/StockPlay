@@ -95,9 +95,12 @@ final class GameController: Identifiable {
     private(set) var review: GameReview?
     private(set) var reviewProgress: Double = 0
     private(set) var isReviewing = false
+    /// The rook-sacrifice easter egg, up for one second.
+    private(set) var showsRookSacrifice = false
 
     private var classificationTask: Task<Void, Never>?
     private var reviewTask: Task<Void, Never>?
+    private var rookSacrificeTask: Task<Void, Never>?
     private var repetitions: [String: Int] = [:]
     private var engineTask: Task<Void, Never>?
     private var clockTask: Task<Void, Never>?
@@ -430,6 +433,9 @@ final class GameController: Identifiable {
         // Theory and forced moves need no engine: there is nothing to compare them with.
         if isForced || isBook {
             applyQuality(isForced ? .forced : .book, bestSAN: nil, at: entryIndex)
+            if isRookSacrifice(move, before: before, after: before.applying(move)) {
+                celebrateRookSacrifice()
+            }
             return
         }
 
@@ -469,6 +475,31 @@ final class GameController: Identifiable {
 
             guard !Task.isCancelled else { return }
             self.applyQuality(quality, bestSAN: bestSAN, at: entryIndex)
+
+            if quality.isPraise, self.isRookSacrifice(move, before: before, after: before.applying(move)) {
+                self.celebrateRookSacrifice()
+            }
+        }
+    }
+
+    /// A rook left on a square where a cheaper piece can take it: a real sacrifice.
+    private func isRookSacrifice(_ move: Move, before: ChessBoard, after: ChessBoard) -> Bool {
+        guard let piece = before.piece(at: move.from),
+              piece.kind == .rook,
+              piece.color == playerColor else {
+            return false
+        }
+        return after.isAttackedByCheaperPiece(move.to, by: piece.color.opposite, than: piece.kind.value)
+    }
+
+    private func celebrateRookSacrifice() {
+        showsRookSacrifice = true
+        rookSacrificeTask?.cancel()
+        rookSacrificeTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(1000))
+            guard !Task.isCancelled else { return }
+            guard let self = self else { return }
+            self.showsRookSacrifice = false
         }
     }
 

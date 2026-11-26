@@ -40,8 +40,10 @@ enum EloRating {
         return 12
     }
 
-    /// Whole-point change for one game: a loss takes points away, a win pays.
+    /// Whole-point change for one game: a loss takes points away, a win pays, a draw is neutral.
     static func ratingChange(rating: Int, opponentRating: Int, score: Double, gamesPlayed: Int) -> Int {
+        if score == 0.5 { return 0 }
+
         let opponent = calculationRating(playerRating: rating, opponentRating: opponentRating)
         let expected = expectedScore(rating: rating, opponentRating: opponent)
         let delta = kFactor(rating: rating, gamesPlayed: gamesPlayed) * (score - expected)

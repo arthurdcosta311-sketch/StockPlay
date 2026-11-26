@@ -89,6 +89,9 @@ struct BoardView: View {
         let rimColor = piece.color == .white ? Theme.ink.opacity(0.92) : Theme.ivory.opacity(0.55)
 
         return ZStack {
+            Text(piece.kind.outlineGlyph)
+                .font(.system(size: glyphSize))
+                .foregroundStyle(piece.color == .white ? Theme.ink : Theme.ivory)
             Text(piece.kind.glyph)
                 .font(.system(size: glyphSize))
                 .foregroundStyle(rimColor)

@@ -97,6 +97,18 @@ enum PieceKind: String, Codable, Sendable, CaseIterable {
         case .king: return "♚"
         }
     }
+
+    /// Hollow version of the same piece, drawn under the filled glyph as a rim.
+    var outlineGlyph: String {
+        switch self {
+        case .pawn: return "♙"
+        case .knight: return "♘"
+        case .bishop: return "♗"
+        case .rook: return "♖"
+        case .queen: return "♕"
+        case .king: return "♔"
+        }
+    }
 }
 
 struct Piece: Hashable, Sendable, Codable {

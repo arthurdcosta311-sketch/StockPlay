@@ -42,7 +42,7 @@ final class StockfishService {
         case .idle, .starting:
             return "Starting Stockfish…"
         case .downloading:
-            return "Downloading the Stockfish network — once, about 113 MB"
+            return "Downloading the Stockfish network — once, about 90 MB"
         case .ready:
             return "Stockfish engine ready"
         case .unavailable:

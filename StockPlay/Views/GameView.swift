@@ -56,12 +56,12 @@ struct GameView: View {
             Text("The grandmaster takes the point and your rating drops as a loss.")
         }
         .overlay {
-            if controller.showsRookSacrifice {
-                RookSacrificeOverlay()
+            if let piece = controller.sacrificeCelebration {
+                SacrificeOverlay(piece: piece)
                     .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.18), value: controller.showsRookSacrifice)
+        .animation(.easeInOut(duration: 0.18), value: controller.sacrificeCelebration)
     }
 
     // MARK: - Chrome

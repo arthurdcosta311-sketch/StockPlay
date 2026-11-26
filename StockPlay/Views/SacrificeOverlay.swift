@@ -147,6 +147,9 @@ struct SacrificeOverlay: View {
             withAnimation(.spring(response: 0.34, dampingFraction: 0.66)) {
                 appeared = true
             }
+            if piece == .rook {
+                SacrificeSound.playRookSound()
+            }
         }
     }
 

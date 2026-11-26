@@ -136,6 +136,11 @@ struct GameOverView: View {
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(Theme.textSecondary)
         }
+        .onAppear {
+            if piece == .rook {
+                SacrificeSound.playRookSound()
+            }
+        }
     }
 
     private var icon: some View {
